@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live Medical Transcription</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Browser-side Voice Activity Detection (Silero VAD) -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/bundle.min.js"></script>
+</head>
+<body>
+  <main class="layout">
+    <!-- ============ LEFT: live transcription ============ -->
+    <section class="card" aria-labelledby="t-title">
+      <h2 id="t-title">&#127908; Live Medical Transcription</h2>
+
+      <div class="toolbar">
+        <button id="btn-start" class="btn btn-primary">Start mic</button>
+        <button id="btn-stop" class="btn btn-danger" disabled>Stop</button>
+        <button id="btn-clear" class="btn btn-ghost">Clear</button>
+        <button id="btn-save" class="btn btn-success">Save recording</button>
+        <button id="btn-sample" class="btn btn-ghost">Load sample</button>
+      </div>
+
+      <div class="chips">
+        <span class="chip">Words: <b id="words">0</b></span>
+        <span class="chip">Chunks: <b id="chunks">0</b></span>
+        <span class="chip status" id="status" data-state="idle">Idle</span>
+      </div>
+
+      <div class="level"><div id="level-bar"></div></div>
+
+      <div id="transcript" class="transcript" aria-live="polite">
+        <p class="placeholder">Ready. Click Start mic and speak naturally. Voice activity detection will split your speech into chunks automatically.</p>
+      </div>
+
+      <button id="btn-process" class="btn btn-primary btn-wide">Process transcript with AI</button>
+      <p id="error" class="error" role="alert" hidden></p>
+    </section>
+
+    <!-- ============ RIGHT: AI summary ============ -->
+    <section class="card" aria-labelledby="s-title">
+      <div class="card-head">
+        <h2 id="s-title">&#9203; AI Medical Summary</h2>
+        <button id="btn-clear-summary" class="btn btn-ghost btn-small">&times; Clear</button>
+      </div>
+
+      <div class="patient-line">
+        <div>Patient name: <b id="p-name">&mdash;</b></div>
+        <div>Age: <b id="p-age">&mdash;</b> &nbsp; Gender: <b id="p-sex">&mdash;</b></div>
+        <div id="p-ids" class="muted"></div>
+      </div>
+
+      <div class="summary-body" id="summary-body">
+        <div class="sec"><h3>Clinical summary</h3>
+          <textarea id="s-summary" placeholder="AI-generated clinical summary will appear here..."></textarea></div>
+        <div class="sec"><h3>Chief complaint</h3><div id="s-cc" class="empty">No complaint extracted yet</div></div>
+        <div class="sec"><h3>History of present illness</h3><div id="s-hpi" class="empty">No history extracted yet</div></div>
+        <div class="sec"><h3>Symptoms</h3><div id="s-symptoms" class="empty">No symptoms extracted yet</div></div>
+        <div class="sec"><h3>Past medical history</h3><div id="s-pmh" class="empty">No past medical history extracted</div></div>
+        <div class="sec"><h3>Medications &amp; allergies</h3><div id="s-meds" class="empty">No medications extracted yet</div></div>
+        <div class="sec"><h3>Examinations &amp; vitals</h3><div id="s-obs" class="empty">No examinations extracted yet</div></div>
+        <div class="sec"><h3>Clinical impression</h3><div id="s-assess" class="empty">No diagnosis stated</div></div>
+        <div class="sec"><h3>Plan &amp; follow-up</h3><div id="s-plan" class="empty">No plan extracted yet</div></div>
+      </div>
+
+      <button id="btn-copy" class="btn btn-primary btn-wide" disabled>Copy to prescription</button>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

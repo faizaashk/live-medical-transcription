@@ -1,0 +1,86 @@
+:root {
+  --bg: #eef1f8;
+  --card: #ffffff;
+  --ink: #1f2547;
+  --muted: #7a82a3;
+  --line: #e3e7f3;
+  --soft: #f3f8fb;
+  --primary: #6366f1;
+  --primary-dark: #4f52d6;
+  --danger: #ef4444;
+  --success: #16a34a;
+  --radius: 18px;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif; font-size: 14px;
+}
+.layout {
+  max-width: 1200px; margin: 0 auto; padding: 24px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;
+}
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr; padding: 12px; } }
+
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 20px; box-shadow: 0 6px 24px rgba(60, 70, 140, .07);
+  display: flex; flex-direction: column; gap: 14px; min-height: 640px;
+}
+.card-head { display: flex; justify-content: space-between; align-items: center; }
+h2 { margin: 0; font-size: 16px; color: var(--primary); }
+h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  border: 1px solid transparent; border-radius: 999px; padding: 8px 14px;
+  font: inherit; font-weight: 600; cursor: pointer; transition: background .15s, opacity .15s;
+}
+.btn:focus-visible { outline: 3px solid #c7c9fb; outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+.btn-danger  { background: #fff; color: var(--danger); border-color: #fbc6c6; }
+.btn-success { background: #fff; color: var(--success); border-color: #b8e5c8; }
+.btn-ghost   { background: #fff; color: var(--ink); border-color: var(--line); }
+.btn-small   { padding: 4px 10px; font-size: 12px; border-radius: 8px; }
+.btn-wide    { width: 100%; border-radius: 10px; padding: 12px; margin-top: auto; }
+
+.chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 12px; color: var(--muted); background: #fff; }
+.status[data-state="listening"] { color: var(--success); border-color: #b8e5c8; }
+.status[data-state="speech"]    { color: #fff; background: var(--primary); border-color: var(--primary); }
+.status[data-state="working"]   { color: #b45309; border-color: #f4d9a6; }
+
+.level { height: 6px; background: var(--line); border-radius: 4px; overflow: hidden; }
+#level-bar { height: 100%; width: 0; background: var(--primary); transition: width .08s linear; }
+
+.transcript {
+  flex: 1; min-height: 260px; max-height: 380px; overflow-y: auto;
+  background: var(--soft); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+  line-height: 1.6;
+}
+.transcript p { margin: 0 0 8px; }
+.transcript .pending { color: var(--muted); font-style: italic; }
+.placeholder { color: var(--muted); }
+
+.patient-line { border-bottom: 1px solid var(--line); padding-bottom: 10px; line-height: 1.7; }
+.muted { color: var(--muted); }
+
+.summary-body { flex: 1; overflow-y: auto; max-height: 560px; padding-right: 6px; display: flex; flex-direction: column; gap: 14px; }
+.sec { border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.empty { color: var(--muted); text-align: center; padding: 10px 0; }
+textarea {
+  width: 100%; min-height: 90px; resize: vertical; font: inherit; color: var(--ink);
+  background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 10px;
+}
+.kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.tag { background: #eef0ff; color: var(--primary-dark); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.tag.neg { background: #fdeeee; color: #b42323; }
+.sub { font-size: 12px; color: var(--muted); margin: 6px 0 4px; }
+ul.plain { margin: 0; padding-left: 18px; }
+.error { color: var(--danger); margin: 0; font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

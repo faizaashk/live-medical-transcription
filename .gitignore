@@ -1,0 +1,19 @@
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Frontend dependencies and builds
+node_modules/
+dist/
+
+# Saved recordings and local files
+consultation-*.json
+.DS_Store
+*.log
