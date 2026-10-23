@@ -1,5 +1,8 @@
 /* Live Medical Transcription - frontend
  * mic -> Silero VAD (browser) -> speech segment (WAV) -> /api/transcribe
+ * While you are still speaking, the audio so far is re-transcribed every ~1.2 s
+ * and shown as a grey "live" line, so text keeps appearing as you talk.
+ * When you pause, the final text replaces the live line.
  * full transcript -> /api/summarize -> structured summary panel
  */
 const $ = (id) => document.getElementById(id);
@@ -12,12 +15,30 @@ const state = {
   pending: 0,          // chunks still being transcribed
   summary: null,       // last structured summary
   processing: false,
+  // live (interim) transcription while the user is speaking
+  liveText: "",        // text shown in grey while speech is in progress
+  frames: [],          // audio frames of the current utterance
+  preBuf: [],          // last few frames before speech starts (so words aren't clipped)
+  speaking: false,
+  liveTimer: null,
+  liveBusy: false,
+  utt: 0,              // utterance counter, used to drop stale live results
+  stream: null, ctx: null, proc: null,   // our own audio capture (feeds the live text)
 };
+const LIVE_EVERY_MS = 1200;
 
-const SAMPLE_TEXT = `Doctor: Good morning, what brings you in today? Patient: Good morning doctor, my name is Tushar, I'm thirty years old, male. I've had a bad headache and fever for the last three days. Doctor: Did it start suddenly? Patient: Yes, it started on Sunday night. It's getting worse in the evening and light makes it worse. Paracetamol helps a little. Doctor: Any vomiting or neck stiffness? Patient: No vomiting and no neck stiffness, but I have body aches and a runny nose. Doctor: Any past medical problems? Patient: I have mild asthma since childhood, and I had my appendix removed in 2015. Doctor: Are you taking any medicines and do you have allergies? Patient: I use a salbutamol inhaler when needed, and I'm allergic to penicillin. Doctor: Let me check. Temperature is 101 degrees Fahrenheit, pulse 92, blood pressure 120 over 80. Throat is mildly red, chest is clear. I think this is a viral fever, possibly influenza. I'll order a CBC and a dengue NS1 test. Take paracetamol 500 milligrams three times a day for three days, drink plenty of fluids, and come back in three days if the fever persists.`;
+// Sample consultation: the patient speaks alone (no doctor).
+const SAMPLE_TEXT = `Hello, my name is Ayesha Khan, I'm twenty eight years old and I'm a woman. For the past five days I've had a sore throat and a dry cough that keeps me awake at night. It started after I got caught in the rain last weekend. The cough gets worse when I lie down and a bit better when I drink warm water with honey. I also have a mild fever in the evenings, but I haven't checked it with a thermometer. I don't have any chest pain and I'm not short of breath, and I haven't lost my sense of smell. I had typhoid when I was ten and I was admitted to hospital for a week. I have no other conditions and I've never had surgery. I'm taking cetirizine at night when my nose is blocked, and I took paracetamol twice yesterday, but I'm not sure of the dose. I'm allergic to sulfa drugs, they gave me a rash once.`;
 
 // --------------------------------------------------------- helpers ----
-const fullText = () => state.segments.join(" ").trim();
+async function errorText(res) {
+  // Server errors may be JSON ({detail}) or plain text ("Internal Server Error").
+  const body = await res.text();
+  try { return JSON.parse(body).detail || res.statusText; }
+  catch { return `${res.status} ${body || res.statusText} (see the uvicorn terminal for details)`; }
+}
+const fullText = () => state.segments.filter(Boolean).join(" ").trim();
+const finalSegments = () => state.segments.filter(Boolean);
 const wordCount = (t) => (t ? t.split(/\s+/).length : 0);
 
 function setStatus(label, st) {
@@ -36,16 +57,19 @@ const list = (a) => (a && a.length ? a : []);
 function render() {
   // transcript box
   const box = $("transcript");
-  if (!state.segments.length && !state.pending) {
-    box.innerHTML = '<p class="placeholder">Ready. Click Start mic and speak naturally. Voice activity detection will split your speech into chunks automatically.</p>';
+  const finals = finalSegments();
+  if (!finals.length && !state.pending && !state.liveText) {
+    box.innerHTML = '<p class="placeholder">Ready. Click Start mic and speak naturally. Your words appear live as you talk; a pause finalises each chunk.</p>';
   } else {
     box.innerHTML =
-      state.segments.map((s) => `<p>${esc(s)}</p>`).join("") +
-      (state.pending ? '<p class="pending">Transcribing…</p>' : "");
+      finals.map((t) => `<p>${esc(t)}</p>`).join("") +
+      (state.liveText
+        ? `<p class="pending">${esc(state.liveText)} …</p>`
+        : state.pending ? '<p class="pending">Transcribing…</p>' : "");
     box.scrollTop = box.scrollHeight;
   }
   $("words").textContent = wordCount(fullText());
-  $("chunks").textContent = state.segments.length;
+  $("chunks").textContent = finalSegments().length;
 
   // buttons
   $("btn-start").disabled = state.recording;
@@ -60,16 +84,30 @@ async function startMic() {
   showError("");
   try {
     setStatus("Loading VAD…", "working");
+    await startCapture();
     state.micVad = await vad.MicVAD.new({
       baseAssetPath: "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/",
       onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/",
-      onSpeechStart: () => setStatus("Hearing speech", "speech"),
+      redemptionMs: 900,      // pause length that ends a chunk (shorter = chunks finalise sooner)
+      preSpeechPadMs: 500,
+      onSpeechStart: () => {
+        setStatus("Hearing speech", "speech");
+        state.speaking = true;
+        state.utt++;
+        state.frames = state.preBuf.slice();
+        clearInterval(state.liveTimer);
+        state.liveTimer = setInterval(sendInterim, LIVE_EVERY_MS);
+      },
       onFrameProcessed: (probs) => {
         $("level-bar").style.width = Math.round(probs.isSpeech * 100) + "%";
       },
-      onVADMisfire: () => setStatus("Listening…", "listening"),
+      onVADMisfire: () => {
+        setStatus("Listening…", "listening");
+        endLive(true);
+      },
       onSpeechEnd: (audio) => {
         setStatus("Listening…", "listening");
+        endLive(false);          // live text stays on screen until the final text arrives
         sendSegment(audio);
       },
     });
@@ -89,30 +127,99 @@ async function startMic() {
 }
 
 function stopMic() {
+  stopCapture();
   if (state.micVad) { state.micVad.pause(); state.micVad.destroy?.(); state.micVad = null; }
   state.recording = false;
+  endLive(true);
+  state.preBuf = [];
   $("level-bar").style.width = "0";
   setStatus("Idle", "idle");
   render();
 }
 
-async function sendSegment(float32Audio) {
-  // Only speech segments reach this point, so silence/noise never hits the ASR.
+// Our own 16 kHz mic capture. It keeps the raw audio so we can show live text
+// while you are still speaking (the VAD alone only hands over audio after a pause).
+async function startCapture() {
+  state.stream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+  });
+  state.ctx = new AudioContext({ sampleRate: 16000 });
+  await state.ctx.resume();
+  const src = state.ctx.createMediaStreamSource(state.stream);
+  state.proc = state.ctx.createScriptProcessor(2048, 1, 1);   // ~128 ms per chunk
+  state.proc.onaudioprocess = (e) => {
+    const chunk = new Float32Array(e.inputBuffer.getChannelData(0));   // copy
+    if (state.speaking) state.frames.push(chunk);
+    else { state.preBuf.push(chunk); if (state.preBuf.length > 8) state.preBuf.shift(); }
+  };
+  src.connect(state.proc);
+  state.proc.connect(state.ctx.destination);   // needed for the callback to fire; output is silent
+}
+
+function stopCapture() {
+  try { state.proc && state.proc.disconnect(); } catch {}
+  try { state.stream && state.stream.getTracks().forEach((t) => t.stop()); } catch {}
+  try { state.ctx && state.ctx.close(); } catch {}
+  state.proc = state.stream = state.ctx = null;
+}
+
+function endLive(clearText) {
+  state.speaking = false;
+  state.utt++;                       // any in-flight live result is now stale
+  clearInterval(state.liveTimer);
+  state.liveTimer = null;
+  state.frames = [];
+  if (clearText) { state.liveText = ""; render(); }
+}
+
+function concatFrames(frames) {
+  const total = frames.reduce((n, f) => n + f.length, 0);
+  const out = new Float32Array(total);
+  let off = 0;
+  for (const f of frames) { out.set(f, off); off += f.length; }
+  return out;
+}
+
+function wavForm(float32Audio) {
   const wav = vad.utils.encodeWAV(float32Audio);        // 16 kHz mono WAV
   const form = new FormData();
   form.append("audio", new Blob([wav], { type: "audio/wav" }), "chunk.wav");
+  return form;
+}
 
-  const slot = state.segments.length + state.pending; // keep chunks in order
+// Live text: re-transcribe everything said so far in the current utterance.
+async function sendInterim() {
+  if (!state.speaking || state.liveBusy || state.frames.length < 5) return;
+  const myUtt = state.utt;
+  state.liveBusy = true;
+  try {
+    const res = await fetch("/api/transcribe", { method: "POST", body: wavForm(concatFrames(state.frames)) });
+    if (!res.ok) throw new Error(await errorText(res));
+    const { text } = await res.json();
+    if (text && myUtt === state.utt && state.speaking) { state.liveText = text; render(); }
+  } catch (err) {
+    console.warn("Live transcription skipped:", err.message);   // final text will still arrive
+  } finally {
+    state.liveBusy = false;
+  }
+}
+
+async function sendSegment(float32Audio) {
+  // Only speech segments reach this point, so silence/noise never hits the ASR.
+  const slot = state.segments.length;   // reserve a slot so chunks stay in order
+  state.segments.push("");
   state.pending++; render();
   try {
-    const res = await fetch("/api/transcribe", { method: "POST", body: form });
-    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const res = await fetch("/api/transcribe", { method: "POST", body: wavForm(float32Audio) });
+    if (!res.ok) throw new Error(await errorText(res));
     const { text } = await res.json();
-    if (text) state.segments.push(text);
+    state.segments[slot] = text || "";
   } catch (err) {
     showError("Transcription failed: " + err.message + ". Is the backend running?");
   } finally {
-    state.pending--; render();
+    state.pending--;
+    if (!state.speaking) state.liveText = "";   // final text replaces the live line
+    render();
   }
 }
 
@@ -129,8 +236,8 @@ async function processTranscript() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
+    if (!res.ok) throw new Error(await errorText(res));
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || res.statusText);
     state.summary = data;
     renderSummary(data);
   } catch (err) {
@@ -257,7 +364,7 @@ function saveRecording() {
 
 function clearAll() {
   if (state.recording) stopMic();
-  state.segments = []; state.pending = 0; showError(""); render();
+  state.segments = []; state.pending = 0; state.liveText = ""; showError(""); render();
 }
 
 // ------------------------------------------------------------ wiring ----

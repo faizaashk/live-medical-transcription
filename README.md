@@ -4,7 +4,7 @@ A web app that listens to a doctor-patient consultation through the microphone,
 shows the transcript live, and turns the finished transcript into a structured
 clinical summary.
 
-> Add a screenshot or GIF of the app here: `![Demo](docs/demo.png)`
+![Live Medical Transcription Demo](docs/demo.png)
 
 ## What it does
 1. Captures live audio from the microphone.
@@ -97,7 +97,6 @@ Click **Load sample**, then **Process transcript with AI**.
 ## Troubleshooting
 | Problem | Fix |
 |---|---|
-| `Address already in use` | Use another port: `--port 8002` |
 | `model_not_found` from the LLM | Pick a model your key can use (see the curl command above) and update `LLM_MODEL` |
 | Summary fails on validation | Retry; the app already retries once and accepts numeric values |
 | Medical words misheard | Set `WHISPER_MODEL=small` (or `medium`) in `.env` |
@@ -108,8 +107,6 @@ Click **Load sample**, then **Process transcript with AI**.
 - Chunks are transcribed after each pause, so a phrase may be split across chunks.
 - Speaker roles (doctor vs patient) are inferred by the LLM, not detected from audio.
 - Summaries can contain mistakes, so a clinician must review every one.
-- This is a student project, not a medical device. Real clinical use would need
-  patient consent, data-protection compliance (e.g. DPDP / HIPAA) and security review.
 
 ## Privacy
 Audio is processed locally and is not stored. Only the transcript text is sent
