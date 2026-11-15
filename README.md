@@ -11,7 +11,8 @@ clinical summary.
 2. Detects speech with Voice Activity Detection (VAD), so silence and background
    noise are never sent for recognition.
 3. Converts speech to text with OpenAI Whisper (`faster-whisper`).
-4. Shows the transcript on screen as each chunk is produced.
+4. Shows the transcript live: words appear in grey while you are still speaking,
+   and the final text replaces them when you pause.
 5. On "Process transcript with AI", sends the full transcript to an LLM.
 6. Extracts structured medical information and shows a concise clinical summary.
 
@@ -42,6 +43,10 @@ full transcript ----------------------->    /api/summarize  -> LLM -> JSON -> su
   stated negatives separate from positive symptoms.
 - **Provider-agnostic LLM.** Any OpenAI-compatible API works (Groq, Gemini,
   OpenAI, local Ollama), plus Anthropic. Chosen in `.env`.
+- **Live text while speaking.** The browser records the microphone itself (16 kHz)
+  alongside the VAD. While you talk, the audio so far is re-transcribed about every
+  1.2 s and shown as a grey live line; when you pause, the final text replaces it.
+  Live requests only run during speech, so silence is still never sent.
 
 ## Tech stack
 - Backend: Python, FastAPI, faster-whisper, Pydantic, OpenAI-compatible client
@@ -75,12 +80,6 @@ LLM_API_KEY=your-key
 LLM_MODEL=openai/gpt-oss-120b
 ```
 
-Model names change often. To see which models your key can use:
-
-```bash
-curl -s https://api.groq.com/openai/v1/models -H "Authorization: Bearer YOUR_KEY"
-```
-
 Then start the server:
 
 ```bash
@@ -97,7 +96,7 @@ Click **Load sample**, then **Process transcript with AI**.
 ## Troubleshooting
 | Problem | Fix |
 |---|---|
-| `model_not_found` from the LLM | Pick a model your key can use (see the curl command above) and update `LLM_MODEL` |
+| `model_not_found` from the LLM | Pick a model your key can use (see the model list in the Groq console docs) and update `LLM_MODEL`|
 | Summary fails on validation | Retry; the app already retries once and accepts numeric values |
 | Medical words misheard | Set `WHISPER_MODEL=small` (or `medium`) in `.env` |
 | Mic does not start | Allow microphone access in Chrome; check the browser console for VAD load errors |

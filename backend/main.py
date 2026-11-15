@@ -31,7 +31,7 @@ LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 
 app = FastAPI(title="Live Medical Transcription")
 
-# Load once at startup (first run downloads the model weights).
+
 asr = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
 
 # ---------------------------------------------------------------- ASR ------
